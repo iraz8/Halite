@@ -45,7 +45,7 @@ class Actions {
 	int locationProduction, eastProduction, southProduction, westProduction, northProduction;
 	int eastOwner, southOwner, westOwner, northOwner;
 	boolean moveCommand;
-	int waitBeforeMoveFactor = 6;
+	boolean eastDefeatable, southDefeatable, westDefeatable, northDefeatable;
 
 	Actions(GameMap gameMap, int myID, int x, int y) {
 		this.gameMap = gameMap;
@@ -73,6 +73,7 @@ class Actions {
 		this.westProduction = westSite.production;
 		this.northProduction = northSite.production;
 
+		//Setare owneri
 		if (eastSite.owner == myID)    // 0 = al meu, 1 = neutru, 2 = al adversarului
 			this.eastOwner = 0;
 		else if (eastSite.owner != 0)
@@ -100,6 +101,16 @@ class Actions {
 			this.northOwner = 2;
 		else
 			this.northOwner = 1;
+
+		//Setare celule alaturate ce pot fi cucerite
+		if (locationStrength > eastStrength)
+			eastDefeatable = true;
+		if (locationStrength > southStrength)
+			southDefeatable = true;
+		if (locationStrength > westStrength)
+			westDefeatable = true;
+		if (locationStrength > northStrength)
+			northDefeatable = true;
 
 		if (locationStrength > locationProduction * 6)    //TODO can be optimized
 			moveCommand = true;
@@ -145,6 +156,9 @@ class Actions {
 				if (y == j)
 					continue;
 				Site tempSite = gameMap.getLocation(i, j).getSite();
+				if (tempSite.owner == myID)
+					continue;
+
 				int tempEfficiency = efficiencyFormula(tempSite.production, tempSite.strength, abs(x - i));
 				if (tempEfficiency > bestEfficiency && locationStrength > tempSite.strength) {
 					bestX = i;
@@ -169,34 +183,32 @@ class Actions {
 			int efficiencyWest = efficiencyFormula(westProduction, westStrength, 1);
 			if (bestX > x) {
 				if (bestY > y) {    //N-E
-					if (efficiencyNorth >= efficiencyEast)
+					if (efficiencyNorth >= efficiencyEast && northOwner != PLAYER && northDefeatable)
 						return Direction.NORTH;
-					else
+					else if (eastOwner != PLAYER && eastDefeatable)
 						return Direction.EAST;
 				}
 				if (bestY < y) {    //E-S
-					if (efficiencyEast >= efficiencySouth)
+					if (efficiencyEast >= efficiencySouth && eastOwner != PLAYER && eastDefeatable)
 						return Direction.EAST;
-					else
+					else if (southOwner != PLAYER && southDefeatable)
 						return Direction.SOUTH;
 				}
 			} else if (bestX < x) {
 				if (bestY < y) {    //S-W
-					if (efficiencySouth >= efficiencyWest)
+					if (efficiencySouth >= efficiencyWest && southOwner != PLAYER && southDefeatable)
 						return Direction.SOUTH;
-					else
+					else if (westOwner != PLAYER && westDefeatable)
 						return Direction.WEST;
 				}
-
 				if (bestY > y) {    //W-N
-					if (efficiencyWest >= efficiencyNorth)
+					if (efficiencyWest >= efficiencyNorth && westOwner != PLAYER && westDefeatable)
 						return Direction.WEST;
-					else
+					else if (northOwner != PLAYER && northDefeatable)
 						return Direction.NORTH;
 				}
 			}
 		}
-
 		return Direction.STILL;
 	}
 
