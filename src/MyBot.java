@@ -10,7 +10,7 @@ public class MyBot {
 		final int myID = iPackage.myID;
 		final GameMap gameMap = iPackage.map;
 
-		Networking.sendInit("V1");
+		Networking.sendInit("V2");
 
 		while (true) {
 			List<Move> moves = new ArrayList<Move>();
@@ -109,7 +109,7 @@ class Actions {
 		int psumES = 0, psumSW = 0, psumWN = 0, psumNE = 0; //productions sums on regions
 		int scanArea = 3;    //TODO can be optimized
 		boolean possibleConquest = false;
-
+		int minX = x, maxX = x, minY = y, maxY = y;
 		if (locationStrength > eastStrength || locationStrength > southStrength
 			|| locationStrength > westStrength || locationStrength > northStrength) {
 			possibleConquest = true;
@@ -118,98 +118,87 @@ class Actions {
 		if (possibleConquest == false)
 			return Direction.STILL;
 
-		for (int i = x + 1; i <= scanArea; i++) {
-			for (int j = y - scanArea; j < y; j++) {
+		if (x - scanArea < 0)
+			minX = gameMap.width - (x - scanArea);
+		else
+			minX = x - scanArea;
+
+		if (x + scanArea > gameMap.width)
+			maxX = 0 + ((x + scanArea) - gameMap.width);
+		else
+			maxX = x + scanArea;
+
+		if (y - scanArea < 0)
+			minY = gameMap.height - (y - scanArea);
+		else
+			minY = y - scanArea;
+
+		if (y + scanArea > gameMap.height)
+			maxY = 0 + ((y + scanArea) - gameMap.height);
+		else
+			maxX = y + scanArea;
+
+		int bestX = 0, bestY = 0, bestEfficiency = 0;
+		for (int i = minX; i <= maxX; i++) {
+			for (int j = minY; j <= maxY; j++) {
 				Site tempSite = gameMap.getLocation(i, j).getSite();
-				if (tempSite.owner != myID) {
-					psumES = psumES + tempSite.production;
+				int tempEfficiency = efficiencyFormula(tempSite.production, tempSite.strength, Math.abs(x - i));
+				if (tempEfficiency > bestEfficiency && locationStrength > tempSite.strength) {
+					bestX = i;
+					bestY = j;
+					bestEfficiency = tempEfficiency;
+				} else {
+					int tempDistance = Math.abs(x - i) + Math.abs(y - j);
+					int bestDistance = Math.abs(x - bestX) + Math.abs(y - bestY);
+					if (tempEfficiency == bestEfficiency && locationStrength > tempSite.strength && tempDistance < bestDistance) {
+						bestX = i;
+						bestY = j;
+						bestEfficiency = tempEfficiency;
+					}
 				}
 			}
 		}
 
-		for (int i = x - scanArea; i < 0; i++) {
-			for (int j = y - scanArea; j < 0; j++) {
-				Site tempSite = gameMap.getLocation(i, j).getSite();
-				if (tempSite.owner != myID) {
-					psumSW = psumSW + tempSite.production;
+		if (bestEfficiency > 0) {
+			int efficiencyNorth = efficiencyFormula(northProduction, northStrength, 1);
+			int efficiencyEast = efficiencyFormula(eastProduction, eastStrength, 1);
+			int efficiencySouth = efficiencyFormula(southProduction, southStrength, 1);
+			int efficiencyWest = efficiencyFormula(westProduction, westStrength, 1);
+			if (bestX > x) {
+				if (bestY > y) {    //N-E
+					if (efficiencyNorth >= efficiencyEast)
+						return Direction.NORTH;
+					else
+						return Direction.EAST;
+				}
+				if (bestY < y) {    //E-S
+					if (efficiencyEast >= efficiencySouth)
+						return Direction.EAST;
+					else
+						return Direction.SOUTH;
+				}
+			} else if (bestX < x) {
+				if (bestY < y) {    //S-W
+					if (efficiencySouth >= efficiencyWest)
+						return Direction.SOUTH;
+					else
+						return Direction.WEST;
+				}
+
+				if (bestY > y) {    //W-N
+					if (efficiencyWest >= efficiencyNorth)
+						return Direction.WEST;
+					else
+						return Direction.NORTH;
 				}
 			}
 		}
 
-		for (int i = x - scanArea; i < 0; i++) {
-			for (int j = y + 1; j <= scanArea; j++) {
-				Site tempSite = gameMap.getLocation(i, j).getSite();
-				if (tempSite.owner != myID) {
-					psumWN = psumWN + tempSite.production;
-				}
-			}
-		}
-
-		for (int i = x + 1; i <= scanArea; i++) {
-			for (int j = y + 1; j <= scanArea; j++) {
-				Site tempSite = gameMap.getLocation(i, j).getSite();
-				if (tempSite.owner != myID) {
-					psumNE = psumNE + tempSite.production;
-				}
-			}
-		}
-
-		ArrayList<Integer> pAreas = new ArrayList<>(4);
-		pAreas.add(psumES);
-		pAreas.add(psumSW);
-		pAreas.add(psumWN);
-		pAreas.add(psumNE);
-
-		Collections.sort(pAreas);
-
-		for (int i = 3; i >= 0; i--) {
-			int currentSum = pAreas.get(i);
-
-			if (psumES == currentSum) {
-				if (locationStrength > eastStrength && eastOwner == NEUTRAL) {
-					return Direction.EAST;
-				} else if (locationStrength > southStrength && southOwner == NEUTRAL) {
-					return Direction.SOUTH;
-				}
-			}
-
-			if (psumSW == currentSum) {
-				if (locationStrength > southStrength && southOwner == NEUTRAL) {
-					return Direction.SOUTH;
-				} else if (locationStrength > westStrength && westOwner == NEUTRAL) {
-					return Direction.WEST;
-				}
-			}
-
-			if (psumWN == currentSum) {
-				if (locationStrength > westStrength && westOwner == NEUTRAL) {
-					return Direction.WEST;
-				} else if (locationStrength > northStrength && northOwner == NEUTRAL) {
-					return Direction.NORTH;
-				}
-			}
-
-			if (psumNE == currentSum) {
-				if (locationStrength > northStrength && northOwner == NEUTRAL) {
-					return Direction.NORTH;
-				} else if (locationStrength > eastStrength && eastOwner == NEUTRAL) {
-					return Direction.EAST;
-				}
-			}
-		}
-
-		if (moveCommand == true) {
-			if (eastOwner == PLAYER && eastStrength > eastProduction * waitBeforeMoveFactor)
-				return Direction.EAST;
-			if (southOwner == PLAYER && southStrength > southProduction * waitBeforeMoveFactor)
-				return Direction.SOUTH;
-			if (westOwner == PLAYER && westStrength > westProduction * waitBeforeMoveFactor)
-				return Direction.WEST;
-			if (northOwner == PLAYER && northStrength > northProduction * waitBeforeMoveFactor)
-				return Direction.NORTH;
-		}
 		return Direction.STILL;
 	}
 
+	int efficiencyFormula(int production, int strength, int steps) {
+		return ((production * 37 - strength) * 5) / steps;
+	}
 
 }
