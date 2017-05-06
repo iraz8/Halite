@@ -106,8 +106,7 @@ class Actions {
 	}
 
 	public Direction movebyBestProductionArea() {
-		int psumES = 0, psumSW = 0, psumWN = 0, psumNE = 0; //productions sums on regions
-		int scanArea = 3;    //TODO can be optimized
+		int scanArea = 5;    //TODO can be optimized
 		boolean possibleConquest = false;
 		int minX = x, maxX = x, minY = y, maxY = y;
 		if (locationStrength > eastStrength || locationStrength > southStrength
@@ -140,16 +139,20 @@ class Actions {
 
 		int bestX = 0, bestY = 0, bestEfficiency = 0;
 		for (int i = minX; i <= maxX; i++) {
+			if (x == i)
+				continue;
 			for (int j = minY; j <= maxY; j++) {
+				if (y == j)
+					continue;
 				Site tempSite = gameMap.getLocation(i, j).getSite();
-				int tempEfficiency = efficiencyFormula(tempSite.production, tempSite.strength, Math.abs(x - i));
+				int tempEfficiency = efficiencyFormula(tempSite.production, tempSite.strength, abs(x - i));
 				if (tempEfficiency > bestEfficiency && locationStrength > tempSite.strength) {
 					bestX = i;
 					bestY = j;
 					bestEfficiency = tempEfficiency;
 				} else {
-					int tempDistance = Math.abs(x - i) + Math.abs(y - j);
-					int bestDistance = Math.abs(x - bestX) + Math.abs(y - bestY);
+					int tempDistance = abs(x - i) + abs(y - j);
+					int bestDistance = abs(x - bestX) + abs(y - bestY);
 					if (tempEfficiency == bestEfficiency && locationStrength > tempSite.strength && tempDistance < bestDistance) {
 						bestX = i;
 						bestY = j;
@@ -199,6 +202,10 @@ class Actions {
 
 	int efficiencyFormula(int production, int strength, int steps) {
 		return ((production * 37 - strength) * 5) / steps;
+	}
+
+	int abs(int number) {
+		return (number < 0) ? -number : number;
 	}
 
 }
