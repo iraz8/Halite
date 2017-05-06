@@ -10,10 +10,11 @@ public class MyBot {
 		final int myID = iPackage.myID;
 		final GameMap gameMap = iPackage.map;
 
-		Networking.sendInit("V2");
+		Networking.sendInit("V3");
 
+		//noinspection InfiniteLoopStatement
 		while (true) {
-			List<Move> moves = new ArrayList<Move>();
+			List<Move> moves = new ArrayList<>();
 
 			Networking.updateFrame(gameMap);
 
@@ -23,8 +24,13 @@ public class MyBot {
 					final Site site = location.getSite();
 					Actions decisionMaker = new Actions(gameMap, myID, x, y);
 					if (site.owner == myID) {
-						moves.add(new Move(location, decisionMaker.movebyBestProductionArea()));
-
+						Direction move = decisionMaker.movebyBestProductionArea();
+						if (move != Direction.STILL)
+							moves.add(new Move(location, move));
+						else {
+							move = decisionMaker.movebyProduction();
+							moves.add(new Move(location, move));
+						}
 						//	moves.add(new Move(location, Direction.randomDirection()));
 					}
 				}
@@ -35,17 +41,43 @@ public class MyBot {
 }
 
 class Actions {
-	final int PLAYER = 0, NEUTRAL = 1, ENEMY = 2;
-	GameMap gameMap;
-	int myID;
-	int x, y;
-	Location location, eastLocation, southLocation, westLocation, northLocation;
-	Site site, eastSite, southSite, westSite, northSite;
-	int locationStrength, eastStrength, southStrength, westStrength, northStrength;
-	int locationProduction, eastProduction, southProduction, westProduction, northProduction;
-	int eastOwner, southOwner, westOwner, northOwner;
-	boolean moveCommand;
-	boolean eastDefeatable, southDefeatable, westDefeatable, northDefeatable;
+	private final int PLAYER = 0;
+	private final int NEUTRAL = 1;
+	private final int ENEMY = 2;
+	private final GameMap gameMap;
+	private final int myID;
+	private final int x;
+	private final int y;
+	private final Location location;
+	private final Location eastLocation;
+	private final Location southLocation;
+	private final Location westLocation;
+	private final Location northLocation;
+	private final Site site;
+	private final Site eastSite;
+	private final Site southSite;
+	private final Site westSite;
+	private final Site northSite;
+	private final int locationStrength;
+	private final int eastStrength;
+	private final int southStrength;
+	private final int westStrength;
+	private final int northStrength;
+	private final int locationProduction;
+	private final int eastProduction;
+	private final int southProduction;
+	private final int westProduction;
+	private final int northProduction;
+	private final int eastOwner;
+	private final int southOwner;
+	private final int westOwner;
+	private final int northOwner;
+	private boolean moveCommand;
+	private boolean possibleConquest;
+	private boolean eastDefeatable;
+	private boolean southDefeatable;
+	private boolean westDefeatable;
+	private boolean northDefeatable;
 
 	Actions(GameMap gameMap, int myID, int x, int y) {
 		this.gameMap = gameMap;
@@ -103,29 +135,28 @@ class Actions {
 			this.northOwner = 1;
 
 		//Setare celule alaturate ce pot fi cucerite
-		if (locationStrength > eastStrength)
-			eastDefeatable = true;
-		if (locationStrength > southStrength)
-			southDefeatable = true;
-		if (locationStrength > westStrength)
-			westDefeatable = true;
-		if (locationStrength > northStrength)
-			northDefeatable = true;
+
+		if (locationStrength > eastStrength && eastOwner != PLAYER)
+			this.eastDefeatable = true;
+		if (locationStrength > southStrength && southOwner != PLAYER)
+			this.southDefeatable = true;
+		if (locationStrength > westStrength && westOwner != PLAYER)
+			this.westDefeatable = true;
+		if (locationStrength > northStrength && northOwner != PLAYER)
+			this.northDefeatable = true;
+
+		if (eastDefeatable || southDefeatable || westDefeatable || northDefeatable)
+			possibleConquest = true;
 
 		if (locationStrength > locationProduction * 6)    //TODO can be optimized
-			moveCommand = true;
+			this.moveCommand = true;
 	}
 
 	public Direction movebyBestProductionArea() {
 		int scanArea = 5;    //TODO can be optimized
-		boolean possibleConquest = false;
-		int minX = x, maxX = x, minY = y, maxY = y;
-		if (locationStrength > eastStrength || locationStrength > southStrength
-			|| locationStrength > westStrength || locationStrength > northStrength) {
-			possibleConquest = true;
-		}
+		int minX, maxX, minY, maxY;
 
-		if (possibleConquest == false)
+		if (!possibleConquest)
 			return Direction.STILL;
 
 		if (x - scanArea < 0)
@@ -134,7 +165,7 @@ class Actions {
 			minX = x - scanArea;
 
 		if (x + scanArea > gameMap.width)
-			maxX = 0 + ((x + scanArea) - gameMap.width);
+			maxX = ((x + scanArea) - gameMap.width);
 		else
 			maxX = x + scanArea;
 
@@ -144,9 +175,9 @@ class Actions {
 			minY = y - scanArea;
 
 		if (y + scanArea > gameMap.height)
-			maxY = 0 + ((y + scanArea) - gameMap.height);
+			maxY = ((y + scanArea) - gameMap.height);
 		else
-			maxX = y + scanArea;
+			maxY = y + scanArea;
 
 		int bestX = 0, bestY = 0, bestEfficiency = 0;
 		for (int i = minX; i <= maxX; i++) {
@@ -183,26 +214,26 @@ class Actions {
 			int efficiencyWest = efficiencyFormula(westProduction, westStrength, 1);
 			if (bestX > x) {
 				if (bestY > y) {    //N-E
-					if (efficiencyNorth >= efficiencyEast && northOwner != PLAYER && northDefeatable)
+					if (efficiencyNorth >= efficiencyEast && northDefeatable)
 						return Direction.NORTH;
 					else if (eastOwner != PLAYER && eastDefeatable)
 						return Direction.EAST;
 				}
 				if (bestY < y) {    //E-S
-					if (efficiencyEast >= efficiencySouth && eastOwner != PLAYER && eastDefeatable)
+					if (efficiencyEast >= efficiencySouth && eastDefeatable)
 						return Direction.EAST;
 					else if (southOwner != PLAYER && southDefeatable)
 						return Direction.SOUTH;
 				}
 			} else if (bestX < x) {
 				if (bestY < y) {    //S-W
-					if (efficiencySouth >= efficiencyWest && southOwner != PLAYER && southDefeatable)
+					if (efficiencySouth >= efficiencyWest && southDefeatable)
 						return Direction.SOUTH;
 					else if (westOwner != PLAYER && westDefeatable)
 						return Direction.WEST;
 				}
 				if (bestY > y) {    //W-N
-					if (efficiencyWest >= efficiencyNorth && westOwner != PLAYER && westDefeatable)
+					if (efficiencyWest >= efficiencyNorth && westDefeatable)
 						return Direction.WEST;
 					else if (northOwner != PLAYER && northDefeatable)
 						return Direction.NORTH;
@@ -212,12 +243,39 @@ class Actions {
 		return Direction.STILL;
 	}
 
-	int efficiencyFormula(int production, int strength, int steps) {
+	private int efficiencyFormula(int production, int strength, int steps) {
 		return ((production * 37 - strength) * 5) / steps;
 	}
 
-	int abs(int number) {
+	private int abs(int number) {
 		return (number < 0) ? -number : number;
+	}
+
+	public Direction movebyProduction() {
+		if (possibleConquest) {
+			ArrayList<Integer> productionList = new ArrayList<>();
+			if (eastDefeatable)
+				productionList.add(eastProduction);
+			if (southDefeatable)
+				productionList.add(southProduction);
+			if (westDefeatable)
+				productionList.add(westProduction);
+			if (northDefeatable)
+				productionList.add(northProduction);
+
+			Collections.sort(productionList);
+			int maxProduction = productionList.get(productionList.size() - 1);
+
+			if (maxProduction == eastProduction && eastDefeatable)
+				return Direction.EAST;
+			if (maxProduction == southProduction && southDefeatable)
+				return Direction.SOUTH;
+			if (maxProduction == westProduction && westDefeatable)
+				return Direction.WEST;
+			if (maxProduction == northProduction && northDefeatable)
+				return Direction.NORTH;
+		}
+		return Direction.STILL;
 	}
 
 }
