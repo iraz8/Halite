@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class MyBot {
@@ -8,12 +9,15 @@ public class MyBot {
 		final int myID = iPackage.myID;
 		final GameMap gameMap = iPackage.map;
 
-		Networking.sendInit("V10");
+		Networking.sendInit("V11");
 
 		int turns = 0;
 		boolean phase1Completed = false;
 		Location bestProductionLocation = null;
 
+		final int PLAYER = 0;
+
+		boolean NAP = true; // non-aggression pact
 		while (true) {
 			List<Move> moves = new ArrayList<Move>();
 
@@ -28,6 +32,9 @@ public class MyBot {
 						if (tempSite.owner == myID) {
 							Actions tempDecisionMaker = new Actions(gameMap, myID, x, y);
 							bestProductionLocation = tempDecisionMaker.findBestProductionSite(x, y);
+							//daca diferentele de productie nu sunt mari, nu merita sa foloseasca strategia de tunneling
+							if (bestProductionLocation.getSite().production < tempSite.production + 5)
+								phase1Completed = true;
 						}
 					}
 			}
@@ -41,16 +48,40 @@ public class MyBot {
 				for (int x = 0; x < gameMap.width; x++) {
 					Location location = gameMap.getLocation(x, y);
 					Site site = location.getSite();
+
+					boolean innerPiece = false;
+
+
 					if (site.owner == myID) {
+						Actions decisionMaker = new Actions(gameMap, myID, x, y);
+						if (decisionMaker.eastOwner == PLAYER &&
+							decisionMaker.southOwner == PLAYER &&
+							decisionMaker.westOwner == PLAYER &&
+							decisionMaker.northOwner == PLAYER)
+							innerPiece = true;
+
 
 						if (!phase1Completed) {
-							Actions decisionMaker = new Actions(gameMap, myID, x, y);
 							Direction moveDirection = decisionMaker.goForBestProductionSiteInEntryGame(bestProductionLocation.getX(), bestProductionLocation.getY());
 							moves.add(new Move(location, moveDirection));
+						} else if (decisionMaker.closeEnemy()) {
+							NAP = false;
+							System.out.println("aaalllert");
+							System.exit(1);
+							moves.add(new Move(location, decisionMaker.attack()));
 						} else {
-							moves.add(new Move(location, Direction.randomDirection()));
+							if (NAP && decisionMaker.closeEnemyTwoCells()) {
+								moves.add(new Move(location, decisionMaker.noAttackPact()));
+							} else if ((x + y + turns) % 2 == 0) {
+								if (!innerPiece)
+									moves.add(new Move(location, decisionMaker.movebyEfficiencyFormula()));
+								else
+									moves.add(new Move(location, decisionMaker.moveInnerPieces()));
+							} else
+								moves.add(new Move(location, Direction.STILL));
 						}
-						//	moves.add(new Move(location, Direction.randomDirection()));
+
+
 					}
 				}
 			}
@@ -90,10 +121,11 @@ class Actions {
 	int southProduction;
 	int westProduction;
 	int northProduction;
-	double MINVALUE = -99999;
 	GameMap gameMap;
 	int myID;
-	int scanArea = 3; //TODO can be optimised
+	int scanArea = 4; //TODO can be optimised
+	int decentProduction = 5; //TODO can be optimised
+	int goodProduction = 10; // TODO can be optimised
 	boolean moveCommand;
 	boolean possibleConquest;
 	boolean eastDefeatable;
@@ -170,7 +202,7 @@ class Actions {
 		if (eastDefeatable || southDefeatable || westDefeatable || northDefeatable)
 			possibleConquest = true;
 
-		if (locationStrength > locationProduction * 6)    //TODO can be optimized
+		if (locationStrength >= locationProduction * 5)    //TODO can be optimized
 			this.moveCommand = true;
 
 
@@ -185,7 +217,7 @@ class Actions {
 		for (int i = minX; i <= maxX; i++)
 			for (int j = minY; j <= maxY; j++) {
 				Site tempSite = gameMap.getLocation(i, j).getSite();
-				if (tempSite.owner != myID) {
+				if (tempSite.owner != myID && (tempSite.strength < locationStrength || tempSite.strength < locationStrength * 5)) {
 					if (tempSite.production == bestProduction) {
 						if (Math.abs(initialX - i) + Math.abs(initialY - j) < Math.abs(initialX - bestX) + Math.abs(initialY - bestY)) {
 							bestX = i;
@@ -207,6 +239,8 @@ class Actions {
 
 	Direction goForBestProductionSiteInEntryGame(int bestX, int bestY) {
 
+		if (!possibleConquest && locationStrength < locationProduction * 4)
+			return Direction.STILL;
 
 		if (x == bestX) {    //daca bestX e pe aceeasi coloana
 			if (y > bestY) {
@@ -262,4 +296,238 @@ class Actions {
 
 		return Direction.STILL;
 	}
+
+	Direction movebyEfficiencyFormula() {
+
+		if (locationProduction > goodProduction && locationStrength < locationProduction * 9)
+			return Direction.STILL;
+
+		if (locationProduction < decentProduction && possibleConquest) {
+			ArrayList<Integer> tempStrengthList = new ArrayList<>();
+			tempStrengthList.add(eastStrength);
+			tempStrengthList.add(southStrength);
+			tempStrengthList.add(westStrength);
+			tempStrengthList.add(northStrength);
+
+			int minStrength = Collections.min(tempStrengthList);
+
+			if (locationStrength > minStrength) {
+				if (eastDefeatable && eastStrength == minStrength)
+					return Direction.EAST;
+				if (southDefeatable && southStrength == minStrength)
+					return Direction.SOUTH;
+				if (westDefeatable && westStrength == minStrength)
+					return Direction.WEST;
+				if (northDefeatable && northStrength == minStrength)
+					return Direction.NORTH;
+			}
+		}
+
+		if (!moveCommand)
+			return Direction.STILL;
+		double efficiencyNorth = efficiencyFormula(northProduction, northStrength);
+		double efficiencyEast = efficiencyFormula(eastProduction, eastStrength);
+		double efficiencySouth = efficiencyFormula(southProduction, southStrength);
+		double efficiencyWest = efficiencyFormula(westProduction, westStrength);
+
+		ArrayList<Double> efficiencyList = new ArrayList<Double>();
+		efficiencyList.add(efficiencyEast);
+		efficiencyList.add(efficiencySouth);
+		efficiencyList.add(efficiencyWest);
+		efficiencyList.add(efficiencyNorth);
+
+		Collections.sort(efficiencyList);
+
+		for (int i = 3; i >= 2; i--) {
+			if (efficiencyList.get(i) == efficiencyEast && eastDefeatable)
+				return Direction.EAST;
+			if (efficiencyList.get(i) == efficiencySouth && southDefeatable)
+				return Direction.SOUTH;
+			if (efficiencyList.get(i) == efficiencyWest && westDefeatable)
+				return Direction.WEST;
+			if (efficiencyList.get(i) == efficiencyNorth && northDefeatable)
+				return Direction.NORTH;
+		}
+
+		if (possibleConquest) {
+			ArrayList<Integer> strengthList = new ArrayList<>();
+			strengthList.add(eastStrength);
+			strengthList.add(southStrength);
+			strengthList.add(westStrength);
+			strengthList.add(northStrength);
+
+			Collections.sort(strengthList);
+			for (int i = 0; i < strengthList.size(); i++) {
+				if (eastDefeatable && eastStrength == strengthList.get(i))
+					return Direction.EAST;
+				if (southDefeatable && southStrength == strengthList.get(i))
+					return Direction.SOUTH;
+				if (westDefeatable && westStrength == strengthList.get(i))
+					return Direction.WEST;
+				if (northDefeatable && northStrength == strengthList.get(i))
+					return Direction.NORTH;
+			}
+		}
+		return Direction.STILL;
+	}
+
+	double efficiencyFormula(double production, double strength) {
+		if (strength > 0)
+			return (production * production) / strength;
+		else
+			return production;
+	}
+
+	Direction moveInnerPieces() {
+		int eastSteps = 0, southSteps = 0, westSteps = 0, northSteps = 0;
+		Location goEast = location, goSouth = location, goWest = location, goNorth = location;
+
+		if (!moveCommand)
+			return Direction.STILL;
+
+		while (goEast.getSite().owner != PLAYER && eastSteps < gameMap.width - 1) {
+			eastSteps++;
+			goEast = gameMap.getLocation(goEast, Direction.EAST);
+		}
+		while (goSouth.getSite().owner != PLAYER && southSteps < gameMap.height - 1) {
+			southSteps++;
+			goSouth = gameMap.getLocation(goSouth, Direction.SOUTH);
+		}
+		while (goWest.getSite().owner != PLAYER && westSteps < gameMap.width - 1) {
+			westSteps++;
+			goWest = gameMap.getLocation(goWest, Direction.WEST);
+		}
+		while (goNorth.getSite().owner != PLAYER && northSteps < gameMap.height - 1) {
+			northSteps++;
+			goNorth = gameMap.getLocation(goNorth, Direction.NORTH);
+		}
+
+		//Daca exista adversar in apropiere, se intareste frontiera
+		if ((eastSteps == 3 || eastSteps == 4 || eastSteps == 5) && goEast.getSite().owner == ENEMY && locationStrength + eastStrength < 280)
+			return Direction.EAST;
+		if ((southSteps == 3 || southSteps == 4 || southSteps == 5) && goSouth.getSite().owner == ENEMY && locationStrength + southStrength < 280)
+			return Direction.SOUTH;
+		if ((westSteps == 3 || westSteps == 4 || westSteps == 5) && goWest.getSite().owner == ENEMY && locationStrength + westStrength < 280)
+			return Direction.WEST;
+		if ((northSteps == 3 || northSteps == 4 || northSteps == 5) && goNorth.getSite().owner == ENEMY && locationStrength + northStrength < 280)
+			return Direction.NORTH;
+
+		//Mareste strength-ul frontierei
+		if (eastSteps == 2 && locationStrength + eastStrength + eastProduction < 255)
+			return Direction.EAST;
+		if (southSteps == 2 && locationStrength + southStrength + southProduction < 255)
+			return Direction.SOUTH;
+		if (westSteps == 2 && locationStrength + westStrength + westProduction < 255)
+			return Direction.WEST;
+		if (northSteps == 2 && locationStrength + northStrength + northProduction < 255)
+			return Direction.NORTH;
+
+		ArrayList<Integer> stepsList = new ArrayList<>();
+		stepsList.add(eastSteps);
+		stepsList.add(southSteps);
+		stepsList.add(westSteps);
+		stepsList.add(northSteps);
+
+		Collections.sort(stepsList);
+
+		for (int i = 0; i < stepsList.size(); i++) {
+			if (eastSteps == stepsList.get(i) && locationStrength + eastStrength + eastProduction < 255)
+				return Direction.EAST;
+			if (southSteps == stepsList.get(i) && locationStrength + southStrength + southProduction < 255)
+				return Direction.SOUTH;
+			if (westSteps == stepsList.get(i) && locationStrength + westStrength + westProduction < 255)
+				return Direction.WEST;
+			if (northSteps == stepsList.get(i) && locationStrength + northStrength + northProduction < 255)
+				return Direction.NORTH;
+		}
+
+		return Direction.STILL;
+	}
+
+
+	boolean closeEnemyTwoCells() {
+		Location eastTwoLocation = gameMap.getLocation(eastLocation, Direction.EAST);
+		Location southTwoLocation = gameMap.getLocation(southLocation, Direction.SOUTH);
+		Location westTwoLocation = gameMap.getLocation(westLocation, Direction.WEST);
+		Location northTwoLocation = gameMap.getLocation(northLocation, Direction.NORTH);
+		Site eastTwoSite = eastTwoLocation.getSite();
+		Site southTwoSite = southTwoLocation.getSite();
+		Site westTwoSite = westTwoLocation.getSite();
+		Site northTwoSite = northTwoLocation.getSite();
+		if (eastTwoSite.owner == ENEMY || southTwoSite.owner == ENEMY || westTwoSite.owner == ENEMY || northTwoSite.owner == ENEMY)
+			return true;
+		return false;
+	}
+
+	Direction noAttackPact() {
+		Location eastTwoLocation = gameMap.getLocation(eastLocation, Direction.EAST);
+		Location southTwoLocation = gameMap.getLocation(southLocation, Direction.SOUTH);
+		Location westTwoLocation = gameMap.getLocation(westLocation, Direction.WEST);
+		Location northTwoLocation = gameMap.getLocation(northLocation, Direction.NORTH);
+		Site eastTwoSite = eastTwoLocation.getSite();
+		Site southTwoSite = southTwoLocation.getSite();
+		Site westTwoSite = westTwoLocation.getSite();
+		Site northTwoSite = northTwoLocation.getSite();
+		if (!moveCommand)
+			return Direction.STILL;
+		if (eastTwoSite.owner == ENEMY) {
+			if (locationStrength < 200)
+				return Direction.STILL;
+			else if (northStrength < southStrength)
+				return Direction.NORTH;
+			else
+				return Direction.SOUTH;
+
+		}
+
+		if (southTwoSite.owner == ENEMY) {
+			if (locationStrength < 200)
+				return Direction.STILL;
+			else if (eastStrength < westStrength && eastStrength < 200)
+				return Direction.EAST;
+			else if (westStrength < 200)
+				return Direction.WEST;
+		}
+
+		if (westTwoSite.owner == ENEMY) {
+			if (locationStrength < 200)
+				return Direction.STILL;
+			else if (southStrength < northStrength && southStrength < 200)
+				return Direction.SOUTH;
+			else if (northStrength < 200)
+				return Direction.NORTH;
+		}
+
+		if (northTwoSite.owner == ENEMY) {
+			if (locationStrength < 200)
+				return Direction.STILL;
+			else if (westStrength < eastStrength && westStrength < 200)
+				return Direction.WEST;
+			else if (eastStrength < 200)
+				return Direction.EAST;
+		}
+
+		return Direction.STILL;
+	}
+
+
+	boolean closeEnemy() {
+		if (eastSite.owner == ENEMY || southSite.owner == ENEMY || westSite.owner == ENEMY || northSite.owner == ENEMY)
+			return true;
+		return false;
+	}
+
+	Direction attack() {
+		if (eastOwner == ENEMY && locationStrength > 1.5 * (double) eastStrength)
+			return Direction.EAST;
+		if (southOwner == ENEMY && locationStrength > 1.5 * (double) southStrength)
+			return Direction.SOUTH;
+		if (westOwner == ENEMY && locationStrength > 1.5 * (double) westStrength)
+			return Direction.WEST;
+		if (northOwner == ENEMY && locationStrength > 1.5 * (double) northStrength)
+			return Direction.NORTH;
+		return Direction.STILL;
+	}
+
+
 }
