@@ -9,7 +9,7 @@ public class MyBot {
 		final InitPackage iPackage = Networking.getInit();
 		final int myID = iPackage.myID;
 		final GameMap gameMap = iPackage.map;
-		Networking.sendInit("V16");
+		Networking.sendInit("V17");
 
 		int turn = 0;
 		while (true) {
@@ -118,7 +118,7 @@ class Actions {
 		if (eastDefeatable || southDefeatable || westDefeatable || northDefeatable)
 			possibleConquest = true;
 
-		if (locationStrength >= locationProduction * 5)    //TODO can be optimized
+		if (locationStrength >= locationProduction * 6 || (checkIfEnemy(location) && possibleConquest))    //TODO can be optimized
 			this.moveCommand = true;
 
 
@@ -148,7 +148,10 @@ class Actions {
 
 		for (int i = 3; i >= 0; i--) {
 			Site siteToAttack = gameMap.getLocation(location, lista.get(i)).getSite();
-			if (locationStrength > siteToAttack.strength) {
+			if (turn < 30 && locationStrength > siteToAttack.strength)
+				if (siteToAttack.owner != myID && !checkIfEnemy(gameMap.getLocation(gameMap.getLocation(location, lista.get(i)), lista.get(i))))
+					return lista.get(i);
+			if (locationStrength - locationStrength * 0.25 > siteToAttack.strength) {
 				if (siteToAttack.owner != myID)
 					return lista.get(i);
 			}
@@ -157,34 +160,37 @@ class Actions {
 		return Direction.STILL;
 	}
 
+	double efficiencybySteps(Location tempLocation, double steps) {
+		return ((tempLocation.getSite().production * tempLocation.getSite().production) + (locationStrength - tempLocation.getSite().strength)) / steps;
+	}
 	double efficiencyFormula(Direction direction) {
 
 		if (direction == Direction.EAST) {
 			if (eastStrength != 0 && eastTwoSite.strength != 0 && eastThreeSite.strength != 0)
-				return eastProduction / eastStrength + eastTwoSite.production / eastTwoSite.strength + 0.5 * (eastThreeSite.production / eastThreeSite.strength);
+				return (eastProduction * eastProduction) / eastStrength + 0.75 * (eastTwoSite.production * eastTwoSite.production) / eastTwoSite.strength + 0.5 * (eastThreeSite.production / eastThreeSite.strength);
 			else
-				return eastProduction + eastTwoSite.production + 0.5 * eastThreeSite.production;
+				return eastProduction + 0.75 * eastTwoSite.production + 0.5 * eastThreeSite.production;
 		}
 
 		if (direction == Direction.SOUTH) {
 			if (southStrength != 0 && southTwoSite.strength != 0 && southThreeSite.strength != 0)
-				return southProduction / southStrength + southTwoSite.production / southTwoSite.strength + 0.5 * (southThreeSite.production / southThreeSite.strength);
+				return (southProduction * southProduction) / southStrength + 0.75 * (southTwoSite.production * southTwoSite.production) / southTwoSite.strength + 0.5 * (southThreeSite.production / southThreeSite.strength);
 			else
-				return southProduction + southTwoSite.production + 0.5 * southThreeSite.production;
+				return southProduction + 0.75 * southTwoSite.production + 0.5 * southThreeSite.production;
 		}
 
 		if (direction == Direction.WEST) {
 			if (westStrength != 0 && westTwoSite.strength != 0 && westThreeSite.strength != 0)
-				return westProduction / westStrength + westTwoSite.production / westTwoSite.strength + 0.5 * (westThreeSite.production / westThreeSite.strength);
+				return (westProduction * westProduction) / westStrength + 0.75 * (westTwoSite.production * westTwoSite.production) / westTwoSite.strength + 0.5 * (westThreeSite.production / westThreeSite.strength);
 			else
-				return westProduction + westTwoSite.production + 0.5 * westThreeSite.production;
+				return westProduction + 0.75 * westTwoSite.production + 0.5 * westThreeSite.production;
 		}
 
 		if (direction == Direction.NORTH) {
 			if (northStrength != 0 && northTwoSite.strength != 0 && northThreeSite.strength != 0)
-				return northProduction / northStrength + northTwoSite.production / northTwoSite.strength + 0.5 * (northThreeSite.production / northThreeSite.strength);
+				return (northProduction * northProduction) / northStrength + 0.75 * (northTwoSite.production * northTwoSite.production) / northTwoSite.strength + 0.5 * (northThreeSite.production / northThreeSite.strength);
 			else
-				return northProduction + northTwoSite.production + 0.5 * northThreeSite.production;
+				return northProduction + 0.75 * northTwoSite.production + 0.5 * northThreeSite.production;
 		}
 
 		return 0;
@@ -217,7 +223,7 @@ class Actions {
 			northTemp = gameMap.getLocation(northTemp, Direction.NORTH);
 		}
 
-
+/*
 		ArrayList<Integer> lista = new ArrayList<>(4);
 		lista.add(eastSteps);
 		lista.add(southSteps);
@@ -226,19 +232,102 @@ class Actions {
 
 		Collections.sort(lista);
 
-		//Varianta ideala fara strength loss si cu numar acceptabil de pasi
-		for (int i = 0; i < 2; i++) {
-			if (lista.get(i) == eastSteps && (locationStrength + eastStrength + eastProduction <= StrengthCap))
+*/
+
+		ArrayList<Location> lista = new ArrayList<>(4);
+		lista.add(eastTemp);
+		lista.add(southTemp);
+		lista.add(westTemp);
+		lista.add(northTemp);
+		Collections.sort(lista, new Comparator<Location>() {
+			public int compare(Location c1, Location c2) {
+				if (efficiencybySteps(c1, gameMap.getDistance(location, c1)) > efficiencybySteps(c2, gameMap.getDistance(location, c2)))
+					return 1;
+				if (efficiencybySteps(c1, gameMap.getDistance(location, c1)) < efficiencybySteps(c2, gameMap.getDistance(location, c2)))
+					return -1;
+				if (gameMap.getDistance(location, c1) > gameMap.getDistance(location, c2)) return 1;
+				if (gameMap.getDistance(location, c1) < gameMap.getDistance(location, c2)) return -1;
+				return 0;
+			}
+		});
+
+		for (int i = 3; i >= 0; i--) {
+			if (locationStrength > lista.get(i).getSite().strength) {
+				if (lista.get(i) == eastTemp && (locationStrength + eastStrength < StrengthCap) && eastStrength < eastProduction * 3)
+					return Direction.EAST;
+				if (lista.get(i) == southTemp && (locationStrength + southStrength < StrengthCap) && southStrength < southProduction * 3)
+					return Direction.SOUTH;
+				if (lista.get(i) == westTemp && (locationStrength + westStrength < StrengthCap) && westStrength < westProduction * 3)
+					return Direction.WEST;
+				if (lista.get(i) == northTemp && (locationStrength + northStrength < StrengthCap) && northStrength < northProduction * 3)
+					return Direction.NORTH;
+			}
+		}
+
+		for (int i = 3; i >= 0; i--) {
+			if (locationStrength > lista.get(i).getSite().strength) {
+				if (lista.get(i) == eastTemp)
+					return Direction.EAST;
+				if (lista.get(i) == southTemp)
+					return Direction.SOUTH;
+				if (lista.get(i) == westTemp)
+					return Direction.WEST;
+				if (lista.get(i) == northTemp)
+					return Direction.NORTH;
+			}
+		}
+
+		/*
+		if (lista.get(0) == eastSteps)
+			return Direction.EAST;
+		if (lista.get(0) == southSteps)
+			return Direction.SOUTH;
+		if (lista.get(0) == westSteps)
+			return Direction.WEST;
+		if (lista.get(0) == northSteps)
+			return Direction.NORTH;
+
+/*
+		if (lista.get(0) <= 2) {
+			if (eastStrength < eastTwoSite.strength * 1.5)
 				return Direction.EAST;
-			if (lista.get(i) == southSteps && (locationStrength + southStrength + southProduction <= StrengthCap))
+			if (southStrength < southTwoSite.strength * 1.5)
 				return Direction.SOUTH;
-			if (lista.get(i) == westSteps && (locationStrength + westStrength + westProduction <= StrengthCap))
+			if (westStrength < westTwoSite.strength * 1.5)
 				return Direction.WEST;
-			if (lista.get(i) == northSteps && (locationStrength + northStrength + northProduction <= StrengthCap))
+			if (northStrength < northTwoSite.strength * 1.5)
+				return Direction.NORTH;
+			return Direction.STILL;
+		}
+
+
+		//in caz de adversar, trimite piese
+		for (int i = 0; i < 2; i++) {
+			if (lista.get(i) == eastSteps && (locationStrength + eastStrength + eastProduction <= StrengthCap) && checkIfEnemy(eastTemp) && locationStrength > eastTemp.getSite().strength)
+				return Direction.EAST;
+			if (lista.get(i) == southSteps && (locationStrength + southStrength + southProduction <= StrengthCap) && checkIfEnemy(southTemp) && locationStrength > southTemp.getSite().strength)
+				return Direction.SOUTH;
+			if (lista.get(i) == westSteps && (locationStrength + westStrength + westProduction <= StrengthCap) && checkIfEnemy(westTemp) && locationStrength > westTemp.getSite().strength)
+				return Direction.WEST;
+			if (lista.get(i) == northSteps && (locationStrength + northStrength + northProduction <= StrengthCap) && checkIfEnemy(northTemp) && locationStrength > northTemp.getSite().strength)
 				return Direction.NORTH;
 		}
 
-		for (int i = 0; i < 4; i++) {
+
+		//Varianta ideala fara strength loss si cu numar acceptabil de pasi
+		for (int i = 0; i < 2; i++) {
+			if (lista.get(i) == eastSteps && (locationStrength + eastStrength + eastProduction <= StrengthCap) && checkIfMoveHere(eastLocation))
+				return Direction.EAST;
+			if (lista.get(i) == southSteps && (locationStrength + southStrength + southProduction <= StrengthCap) && checkIfMoveHere(southLocation))
+				return Direction.SOUTH;
+			if (lista.get(i) == westSteps && (locationStrength + westStrength + westProduction <= StrengthCap) && checkIfMoveHere(westLocation))
+				return Direction.WEST;
+			if (lista.get(i) == northSteps && (locationStrength + northStrength + northProduction <= StrengthCap) && checkIfMoveHere(northLocation))
+				return Direction.NORTH;
+		}
+
+
+		for (int i = 0; i < 2; i++) {
 			if (lista.get(i) == eastSteps && (locationStrength + eastStrength + eastProduction <= StrengthCap + 100))
 				return Direction.EAST;
 			if (lista.get(i) == southSteps && (locationStrength + southStrength + southProduction <= StrengthCap + 100))
@@ -257,7 +346,30 @@ class Actions {
 			return Direction.WEST;
 		if (lista.get(0) == northSteps)
 			return Direction.NORTH;
-
+*/
 		return Direction.STILL;
+	}
+
+	Boolean checkIfEnemy(Location tempLocation) {
+		Site eastTempSite = gameMap.getLocation(tempLocation, Direction.EAST).getSite();
+		Site southTempSite = gameMap.getLocation(tempLocation, Direction.SOUTH).getSite();
+		Site westTempSite = gameMap.getLocation(tempLocation, Direction.SOUTH).getSite();
+		Site northTempSite = gameMap.getLocation(tempLocation, Direction.SOUTH).getSite();
+		if (tempLocation.getSite().owner != myID)
+			if ((eastTempSite.owner != myID && eastTempSite.owner != 0) ||
+				(southTempSite.owner != myID && southTempSite.owner != 0) ||
+				(westTempSite.owner != myID && westTempSite.owner != 0) ||
+				(northTempSite.owner != myID && northTempSite.owner != 0))
+				return Boolean.TRUE;
+
+		return Boolean.FALSE;
+	}
+
+
+	Boolean checkIfMoveHere(Location tempLocation) {
+		Site tempSite = tempLocation.getSite();
+		if (tempSite.strength < tempSite.production * 4 && tempSite.production > 4)
+			return Boolean.FALSE;
+		return Boolean.TRUE;
 	}
 }
